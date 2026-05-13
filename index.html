@@ -204,7 +204,7 @@
                                         <th className="text-left py-2 font-medium">类别</th>
                                         <th className="text-right py-2 font-medium">时/天</th>
                                         <th className="text-right py-2 font-medium">总计年</th>
-                                        <th className="text-right py-2 font-medium hidden sm:table-cell">总小时</th>
+                                        <th className="text-right py-2 font-medium">总小时</th>
                                         <th className="text-right py-2 font-medium hidden sm:table-cell">总计周</th>
                                         <th className="text-right py-2 font-medium">占比</th>
                                     </tr>
@@ -228,7 +228,7 @@
                                                     onClick={() => { navigator.clipboard.writeText(item.totalYears.toFixed(1)); showToast('已复制 ' + item.totalYears.toFixed(1) + ' 年'); }}>
                                                     <span className={item.computed ? 'text-cyan-700 font-bold' : 'text-gray-800'}>{item.totalYears.toFixed(1)}</span>
                                                 </td>
-                                                <td className="text-right text-gray-500 py-3 hidden sm:table-cell">{Math.round(item.totalHours).toLocaleString()}</td>
+                                                <td className="text-right text-gray-500 py-3">{Math.round(item.totalHours).toLocaleString()}</td>
                                                 <td className="text-right text-gray-500 py-3 hidden sm:table-cell">{Math.round(item.totalWeeks).toLocaleString()}</td>
                                                 <td className="text-right py-3">
                                                     <span className="inline-block min-w-[40px] text-xs px-1.5 py-0.5 rounded-full font-medium"
