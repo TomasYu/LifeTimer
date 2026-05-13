@@ -76,13 +76,13 @@
         }
 
         function App() {
-            const [birthYearText, setBirthYearText] = useState('1993');
-            const [expectAgeText, setExpectAgeText] = useState('90');
+            const [birthYearText, setBirthYearText] = useState('1990');
+            const [expectAgeText, setExpectAgeText] = useState('80');
             const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
             const [toast, setToast] = useState(null);
 
-            const birthYear = useMemo(() => { const n = parseInt(birthYearText, 10); return isNaN(n) ? 1993 : Math.max(1900, Math.min(CURRENT_YEAR, n)); }, [birthYearText]);
-            const expectAge = useMemo(() => { const n = parseInt(expectAgeText, 10); return isNaN(n) ? 90 : Math.max(1, Math.min(120, n)); }, [expectAgeText]);
+            const birthYear = useMemo(() => { const n = parseInt(birthYearText, 10); return isNaN(n) ? 1990 : Math.max(1900, Math.min(CURRENT_YEAR, n)); }, [birthYearText]);
+            const expectAge = useMemo(() => { const n = parseInt(expectAgeText, 10); return isNaN(n) ? 80 : Math.max(1, Math.min(120, n)); }, [expectAgeText]);
 
             const currentAge = CURRENT_YEAR - birthYear;
             const remainYears = Math.max(0, expectAge - currentAge);
