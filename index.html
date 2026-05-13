@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeTimer - 人生余额可视化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0', 300: '#86efac', 400: '#4ade80', 500: '#22c55e', 600: '#16a34a', 700: '#15803d' },
+                        warm: { 50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74', 400: '#fb923c', 500: '#f97316' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease forwards; }
+        .life-card { transition: all 0.2s ease; }
+        .life-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        input[type="range"] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #16a34a; cursor: pointer; border: 3px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+        input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #16a34a; cursor: pointer; border: 3px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useMemo, useCallback } = React;
+
+        const CURRENT_YEAR = new Date().getFullYear();
+
+        const COLORS = ['#6366f1', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#10b981', '#ec4899', '#06b6d4'];
+
+        const DEFAULT_CATEGORIES = [
+            { id: 'sleep', name: '睡觉', icon: '🌙', hoursPerDay: 8, desc: '每天 8 小时，生命的 1/3', color: '#6366f1' },
+            { id: 'work', name: '工作', icon: '💼', hoursPerDay: 8, desc: '朝九晚五，工作日 8 小时', color: '#f59e0b', workdayOnly: true, retireAge: 60 },
+            { id: 'commute', name: '通勤', icon: '🚇', hoursPerDay: 1.5, desc: '每天往返通勤', color: '#3b82f6', workdayOnly: true, retireAge: 60 },
+            { id: 'eat', name: '吃饭', icon: '🍜', hoursPerDay: 2, desc: '三餐及准备时间', color: '#ef4444' },
+            { id: 'hygiene', name: '洗漱/家务', icon: '🚿', hoursPerDay: 1.5, desc: '个人卫生与家务', color: '#8b5cf6' },
+            { id: 'phone', name: '刷手机', icon: '📱', hoursPerDay: 3, desc: '社交媒体、短视频等', color: '#ec4899' },
+            { id: 'exercise', name: '运动', icon: '🏃', hoursPerDay: 0.5, desc: '锻炼身体', color: '#10b981' },
+            { id: 'free', name: '真正自由时间', icon: '✨', hoursPerDay: 0, desc: '剩余可自由支配的时间', color: '#06b6d4', computed: true },
+        ];
+
+        function StepInput({ value, text, setText, step, min, max, label, unit }) {
+            return (
+                <div>
+                    <label className="block text-sm text-gray-500 mb-1.5">{label}</label>
+                    <div className="flex items-center gap-0">
+                        <button onClick={() => { const n = Math.max(min, value - step); setText(String(n)); }}
+                            className="w-10 h-[42px] flex items-center justify-center border border-r-0 border-gray-200 rounded-l-xl bg-gray-50 hover:bg-gray-100 active:bg-gray-200 text-gray-500 text-lg font-medium transition flex-shrink-0">−</button>
+                        <div className="relative flex-1">
+                            {unit && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{unit}</span>}
+                            <input type="text" inputMode="numeric" value={text}
+                                onChange={e => { const v = e.target.value.replace(/\D/g, ''); setText(v); }}
+                                onFocus={e => e.target.select()}
+                                onBlur={() => { let n = parseInt(text, 10); if (isNaN(n)) n = min; n = Math.max(min, Math.min(max, n)); setText(String(n)); }}
+                                onKeyDown={e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); const n = e.key === 'ArrowUp' ? Math.min(max, value + step) : Math.max(min, value - step); setText(String(n)); } }}
+                                className={`w-full py-2.5 text-center border border-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-transparent transition ${unit ? 'pr-8' : ''}`} />
+                        </div>
+                        <button onClick={() => { const n = Math.min(max, value + step); setText(String(n)); }}
+                            className="w-10 h-[42px] flex items-center justify-center border border-l-0 border-gray-200 rounded-r-xl bg-gray-50 hover:bg-gray-100 active:bg-gray-200 text-gray-500 text-lg font-medium transition flex-shrink-0">+</button>
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-1 text-center">每次调整 {step}{unit || ''}</div>
+                </div>
+            );
+        }
+
+        function App() {
+            const [birthYearText, setBirthYearText] = useState('1993');
+            const [expectAgeText, setExpectAgeText] = useState('80');
+            const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+            const [toast, setToast] = useState(null);
+
+            const birthYear = useMemo(() => { const n = parseInt(birthYearText, 10); return isNaN(n) ? 1993 : Math.max(1900, Math.min(CURRENT_YEAR, n)); }, [birthYearText]);
+            const expectAge = useMemo(() => { const n = parseInt(expectAgeText, 10); return isNaN(n) ? 80 : Math.max(1, Math.min(120, n)); }, [expectAgeText]);
+
+            const currentAge = CURRENT_YEAR - birthYear;
+            const remainYears = Math.max(0, expectAge - currentAge);
+
+            const showToast = useCallback((msg) => {
+                setToast(msg);
+                setTimeout(() => setToast(null), 2000);
+            }, []);
+
+            const handleHoursChange = useCallback((id, newHours) => {
+                setCategories(prev => prev.map(c => c.id === id ? { ...c, hoursPerDay: Math.max(0, Math.min(24, parseFloat(newHours) || 0)) } : c));
+            }, []);
+
+            const stats = useMemo(() => {
+                const remainDays = remainYears * 365.25;
+                const workYearsLeft = Math.max(0, Math.min(remainYears, (categories.find(c => c.id === 'work')?.retireAge || 60) - currentAge));
+                const workDaysLeft = workYearsLeft * 250;
+                const nonWorkDaysLeft = remainDays - workDaysLeft;
+
+                let usedHoursTotal = 0;
+                const items = categories.filter(c => !c.computed).map(cat => {
+                    let totalHours;
+                    if (cat.workdayOnly) {
+                        totalHours = cat.hoursPerDay * workDaysLeft;
+                    } else {
+                        totalHours = cat.hoursPerDay * remainDays;
+                    }
+                    usedHoursTotal += totalHours;
+
+                    const totalDays = totalHours / 24;
+                    const totalYears = totalDays / 365.25;
+                    const totalWeeks = totalDays / 7;
+
+                    return { ...cat, totalHours, totalDays, totalYears, totalWeeks };
+                });
+
+                const totalRemainHours = remainDays * 24;
+                const freeHours = Math.max(0, totalRemainHours - usedHoursTotal);
+                const freeDays = freeHours / 24;
+                const freeYears = freeDays / 365.25;
+                const freeWeeks = freeDays / 7;
+                const freeCat = categories.find(c => c.computed);
+
+                items.push({
+                    ...freeCat,
+                    hoursPerDay: remainDays > 0 ? (freeHours / remainDays) : 0,
+                    totalHours: freeHours,
+                    totalDays: freeDays,
+                    totalYears: freeYears,
+                    totalWeeks: freeWeeks,
+                });
+
+                return { items, totalRemainHours, remainDays, remainYears, workYearsLeft };
+            }, [categories, remainYears, currentAge]);
+
+            const resetCategories = useCallback(() => setCategories(DEFAULT_CATEGORIES), []);
+
+            return (
+                <div className="max-w-2xl mx-auto px-4 py-6 sm:py-10">
+                    {/* Header */}
+                    <header className="text-center mb-8">
+                        <div className="inline-flex items-center gap-2 mb-2">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">LifeTimer</h1>
+                        </div>
+                        <p className="text-gray-500 text-sm">人生余额可视化</p>
+                    </header>
+
+                    {/* 基本设置 */}
+                    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 mb-5">
+                        <h2 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            基本设置
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <StepInput value={birthYear} text={birthYearText} setText={setBirthYearText} step={1} min={1900} max={CURRENT_YEAR} label="出生年份" unit="年" />
+                            <StepInput value={expectAge} text={expectAgeText} setText={setExpectAgeText} step={5} min={1} max={120} label="期望寿命" unit="岁" />
+                        </div>
+
+                        {/* 概览卡片 */}
+                        <div className="grid grid-cols-3 gap-3 mt-4">
+                            <div className="p-3 bg-brand-50 rounded-xl text-center">
+                                <div className="text-xs text-brand-600 mb-1">当前年龄</div>
+                                <div className="text-xl font-bold text-brand-700">{currentAge}</div>
+                                <div className="text-[10px] text-brand-500">岁</div>
+                            </div>
+                            <div className="p-3 bg-warm-50 rounded-xl text-center">
+                                <div className="text-xs text-warm-500 mb-1">剩余年数</div>
+                                <div className="text-xl font-bold text-orange-600">{remainYears}</div>
+                                <div className="text-[10px] text-warm-500">年</div>
+                            </div>
+                            <div className="p-3 bg-blue-50 rounded-xl text-center">
+                                <div className="text-xs text-blue-500 mb-1">剩余天数</div>
+                                <div className="text-xl font-bold text-blue-600">{Math.round(stats.remainDays).toLocaleString()}</div>
+                                <div className="text-[10px] text-blue-500">天</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 人生余额明细 */}
+                    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 mb-5">
+                        <h2 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            人生余额明细
+                        </h2>
+
+                        {/* 进度条 */}
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex mb-5">
+                            {stats.items.map(item => item.totalHours > 0 && (
+                                <div key={item.id} style={{ width: `${(item.totalHours / stats.totalRemainHours * 100)}%`, backgroundColor: item.color }}
+                                    className="transition-all duration-300 first:rounded-l-full last:rounded-r-full" />
+                            ))}
+                        </div>
+
+                        <div className="overflow-x-auto -mx-5 sm:-mx-6 px-5 sm:px-6">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="text-gray-400 text-xs">
+                                        <th className="text-left py-2 font-medium">类别</th>
+                                        <th className="text-right py-2 font-medium">时/天</th>
+                                        <th className="text-right py-2 font-medium">总计年</th>
+                                        <th className="text-right py-2 font-medium hidden sm:table-cell">总小时</th>
+                                        <th className="text-right py-2 font-medium hidden sm:table-cell">总计周</th>
+                                        <th className="text-right py-2 font-medium">占比</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.items.map(item => {
+                                        const pct = stats.totalRemainHours > 0 ? (item.totalHours / stats.totalRemainHours * 100) : 0;
+                                        return (
+                                            <tr key={item.id} className={`border-t border-gray-50 ${item.computed ? 'bg-cyan-50/50' : ''}`}>
+                                                <td className="py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-base">{item.icon}</span>
+                                                        <div>
+                                                            <span className={`text-sm ${item.computed ? 'font-bold text-cyan-700' : 'text-gray-700'}`}>{item.name}</span>
+                                                            {item.workdayOnly && <span className="text-[10px] ml-1 text-amber-500">工作日</span>}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="text-right text-gray-500 py-3">{item.hoursPerDay.toFixed(1)}h</td>
+                                                <td className="text-right font-medium py-3 cursor-pointer hover:text-brand-600 transition"
+                                                    onClick={() => { navigator.clipboard.writeText(item.totalYears.toFixed(1)); showToast('已复制 ' + item.totalYears.toFixed(1) + ' 年'); }}>
+                                                    <span className={item.computed ? 'text-cyan-700 font-bold' : 'text-gray-800'}>{item.totalYears.toFixed(1)}</span>
+                                                </td>
+                                                <td className="text-right text-gray-500 py-3 hidden sm:table-cell">{Math.round(item.totalHours).toLocaleString()}</td>
+                                                <td className="text-right text-gray-500 py-3 hidden sm:table-cell">{Math.round(item.totalWeeks).toLocaleString()}</td>
+                                                <td className="text-right py-3">
+                                                    <span className="inline-block min-w-[40px] text-xs px-1.5 py-0.5 rounded-full font-medium"
+                                                        style={{ backgroundColor: item.color + '20', color: item.color }}>{pct.toFixed(1)}%</span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    {/* 人生刻度 */}
+                    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 mb-5">
+                        <h2 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                            可活次数参考
+                        </h2>
+                        <p className="text-xs text-gray-400 mb-4">按剩余 {remainYears} 年估算</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                                { name: '春节', icon: '🧧', perYear: 1 },
+                                { name: '生日', icon: '🎂', perYear: 1 },
+                                { name: '周末', icon: '🌅', perYear: 52 },
+                                { name: '四季更替', icon: '🍂', perYear: 4 },
+                                { name: '满月', icon: '🌕', perYear: 12 },
+                                { name: '看日出', icon: '🌄', perYear: 12 },
+                                { name: '旅行', icon: '✈️', perYear: 2 },
+                                { name: '读一本书', icon: '📚', perYear: 12 },
+                                { name: '和父母吃饭', icon: '👨‍👩‍👦', perYear: 12 },
+                            ].map(item => (
+                                <div key={item.name} className="life-card p-3 bg-gray-50 rounded-xl text-center">
+                                    <div className="text-2xl mb-1">{item.icon}</div>
+                                    <div className="text-xs text-gray-500 mb-1">{item.name}</div>
+                                    <div className="text-lg font-bold text-gray-800">{(item.perYear * remainYears).toLocaleString()}</div>
+                                    <div className="text-[10px] text-gray-400">次</div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* 时间分布 */}
+                    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 mb-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-base font-semibold text-gray-700 flex items-center gap-2">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                                每日时间分配
+                            </h2>
+                            <button onClick={resetCategories} className="text-xs text-gray-400 hover:text-brand-600 transition">重置</button>
+                        </div>
+                        <p className="text-xs text-gray-400 mb-4">调整每日各项时间，「真正自由时间」自动计算</p>
+
+                        {/* 分类卡片 */}
+                        <div className="space-y-3">
+                            {categories.filter(c => !c.computed).map(cat => (
+                                <CategoryCard key={cat.id} cat={cat} onChange={handleHoursChange} />
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* Footer */}
+                    <footer className="text-center text-xs text-gray-400 py-4">
+                        LifeTimer · 珍惜每一天
+                    </footer>
+
+                    {/* Toast */}
+                    {toast && (
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg fade-in z-50">
+                            {toast}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function CategoryCard({ cat, onChange }) {
+            const [text, setText] = useState(String(cat.hoursPerDay));
+            const prevHours = React.useRef(cat.hoursPerDay);
+            if (prevHours.current !== cat.hoursPerDay && String(cat.hoursPerDay) !== text) {
+                setText(String(cat.hoursPerDay));
+                prevHours.current = cat.hoursPerDay;
+            }
+
+            const step = 0.5;
+
+            return (
+                <div className="life-card bg-gray-50 rounded-xl p-4">
+                    <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1 min-w-0 mr-3">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-base">{cat.icon}</span>
+                                <span className="text-sm font-medium text-gray-800">{cat.name}</span>
+                                {cat.workdayOnly && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600 font-medium">工作日</span>}
+                            </div>
+                            <div className="ml-7 text-xs text-gray-400">{cat.desc}</div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                            <div className="text-lg font-bold text-gray-800">{cat.hoursPerDay}h</div>
+                            <div className="text-[10px] text-gray-400">/天</div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <input type="range" min="0" max="16" step="0.5" value={cat.hoursPerDay}
+                            onChange={e => { const v = e.target.value; onChange(cat.id, v); setText(v); }}
+                            className="flex-1 cursor-pointer"
+                            style={{ background: `linear-gradient(to right, ${cat.color} 0%, ${cat.color} ${cat.hoursPerDay / 16 * 100}%, #e5e7eb ${cat.hoursPerDay / 16 * 100}%, #e5e7eb 100%)` }} />
+                        <div className="flex items-center gap-0">
+                            <button onClick={() => { const n = Math.max(0, cat.hoursPerDay - step); onChange(cat.id, n); setText(String(n)); }}
+                                className="w-7 h-[30px] flex items-center justify-center border border-r-0 border-gray-200 rounded-l-lg bg-white hover:bg-gray-100 active:bg-gray-200 text-gray-500 text-xs font-medium transition">−</button>
+                            <input type="text" inputMode="decimal" value={text}
+                                onChange={e => { const v = e.target.value.replace(/[^\d.]/g, ''); setText(v); const n = parseFloat(v); if (!isNaN(n)) onChange(cat.id, n); }}
+                                onFocus={e => e.target.select()}
+                                onBlur={() => setText(String(cat.hoursPerDay))}
+                                onKeyDown={e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); const n = e.key === 'ArrowUp' ? Math.min(16, cat.hoursPerDay + step) : Math.max(0, cat.hoursPerDay - step); onChange(cat.id, n); setText(String(n)); } }}
+                                className="w-12 text-center text-sm py-1 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-300" />
+                            <button onClick={() => { const n = Math.min(16, cat.hoursPerDay + step); onChange(cat.id, n); setText(String(n)); }}
+                                className="w-7 h-[30px] flex items-center justify-center border border-l-0 border-gray-200 rounded-r-lg bg-white hover:bg-gray-100 active:bg-gray-200 text-gray-500 text-xs font-medium transition">+</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
